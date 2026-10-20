@@ -1,0 +1,23 @@
+{
+ "name": "Ayo Absen · Siswa",
+ "short_name": "Ayo Siswa",
+ "start_url": "./siswa.html",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#e6e8e4",
+ "theme_color": "#1c6b4f",
+ "icons": [
+  {
+   "src": "icon-siswa-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any"
+  },
+  {
+   "src": "icon-siswa-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  }
+ ]
+}

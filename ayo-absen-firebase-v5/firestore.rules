@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function prof() { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data; }
+    function exists_() { return request.auth != null && exists(/databases/$(db)/documents/users/$(request.auth.uid)); }
+    // akun aktif: admin (dibuat lewat Console) atau akun yang sudah disetujui admin
+    function has() { return exists_() && (prof().role == 'admin' || prof().get('ok', false) == true); }
+    function admin() { return has() && prof().role == 'admin'; }
+    function staff() { return has() && prof().role in ['guru','admin']; }
+
+    match /users/{u} {
+      allow read: if request.auth != null && (request.auth.uid == u || admin());
+      allow create: if request.auth.uid == u
+        && request.resource.data.role in ['siswa','ortu','guru']
+        && request.resource.data.ok == false
+        && request.resource.data.keys().hasOnly(['role','nisn','email','name','ok']);
+      // pemilik hanya boleh mengubah data saat masih menunggu persetujuan
+      allow update: if (request.auth.uid == u && resource.data.ok == false
+          && request.resource.data.role == resource.data.role && request.resource.data.ok == false)
+        || admin();
+      allow delete: if admin();
+    }
+
+    match /ayo/meta {
+      allow read: if has();
+      allow create: if admin();
+      allow update: if admin()
+        || (has() && prof().role == 'guru' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['izin','log','sp','nilai']))
+        || (has() && prof().role == 'siswa' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['izin','log']));
+    }
+
+    // format dokumen absen yang boleh ditulis siswa (cegah isi liar / XSS)
+    function okAtt(d){ return d.get('in','00:00').matches('[0-9]{2}:[0-9]{2}')
+      && d.get('out','00:00').matches('[0-9]{2}:[0-9]{2}')
+      && d.get('dist',0) is number
+      && d.get('photo','').size() < 30000
+      && (d.get('photo','') == '' || d.get('photo','').matches('data:image/jpeg;base64,.*')); }
+    function mine(id) { return has() && prof().role == 'siswa' && id.matches('.*_' + prof().nisn); }
+    // field yang sudah terisi tidak boleh diubah siswa (masuk, foto, jarak, validasi)
+    function lock(f) { return !(f in resource.data) || request.resource.data.get(f, null) == resource.data[f]; }
+
+    match /absen/{id} {
+      allow read: if staff() || (has() && (resource.data.n == prof().nisn || id.matches('.*_' + prof().nisn)));
+      allow create: if staff()
+        || (mine(id) && request.resource.data.n == prof().nisn
+            && request.resource.data.get('valid', null) == null && okAtt(request.resource.data));
+      allow update: if staff()
+        || (mine(id) && request.resource.data.n == prof().nisn && okAtt(request.resource.data)
+            && request.resource.data.get('valid', null) == resource.data.get('valid', null)
+            && lock('in') && lock('photo') && lock('dist'));
+    }
+  }
+}
